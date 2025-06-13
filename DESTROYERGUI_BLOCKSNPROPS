@@ -1,0 +1,576 @@
+local ScreenGui = Instance.new("ScreenGui")
+local Frame = Instance.new("Frame")
+local TitleBar = Instance.new("Frame")
+local Title = Instance.new("TextLabel")
+local CloseButton = Instance.new("TextButton")
+local ContentContainer = Instance.new("Frame")
+local FireButton = Instance.new("TextButton")
+local ServerWipeButton = Instance.new("TextButton")
+local PlayerLabel = Instance.new("TextLabel")
+local PlayerBox = Instance.new("TextBox")
+local TargetDisplay = Instance.new("TextLabel")
+local StatusLabel = Instance.new("TextLabel")
+local WipeStatus = Instance.new("TextLabel")
+local HideButton = Instance.new("TextButton")
+local Credits = Instance.new("TextLabel")
+
+-- ScreenGui setup
+ScreenGui.Name = "c00lgui"
+ScreenGui.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.ResetOnSpawn = false
+
+-- Main Frame - centered and responsive positioning
+Frame.Size = UDim2.new(0, 300, 0, 240)
+Frame.Position = UDim2.new(0.5, -150, 0.5, -120)
+Frame.AnchorPoint = Vector2.new(0.5, 0.5)
+Frame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+Frame.BorderSizePixel = 1
+Frame.BorderColor3 = Color3.fromRGB(255, 0, 0)
+Frame.Parent = ScreenGui
+Frame.Active = true
+Frame.Draggable = true
+
+-- Title bar
+TitleBar.Size = UDim2.new(1, 0, 0, 25)
+TitleBar.Position = UDim2.new(0, 0, 0, 0)
+TitleBar.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+TitleBar.BorderSizePixel = 1
+TitleBar.BorderColor3 = Color3.fromRGB(255, 0, 0)
+TitleBar.Parent = Frame
+
+-- Title
+Title.Size = UDim2.new(1, -35, 1, 0)
+Title.Position = UDim2.new(0, 8, 0, 0)
+Title.Text = "c00lgui PLACE OBJECT HACK!1"
+Title.Font = Enum.Font.Code
+Title.TextSize = 12
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.BackgroundTransparency = 1
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.TextYAlignment = Enum.TextYAlignment.Center
+Title.Parent = TitleBar
+
+-- Close button
+CloseButton.Size = UDim2.new(0, 22, 0, 22)
+CloseButton.Position = UDim2.new(1, 0, 0, 1.5)
+CloseButton.AnchorPoint = Vector2.new(1, 0)
+CloseButton.Text = "x"
+CloseButton.Font = Enum.Font.Code
+CloseButton.TextSize = 12
+CloseButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+CloseButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+CloseButton.BorderSizePixel = 1
+CloseButton.BorderColor3 = Color3.fromRGB(100, 0, 0)
+CloseButton.Parent = TitleBar
+
+-- Content container
+ContentContainer.Size = UDim2.new(1, -20, 1, -35)
+ContentContainer.Position = UDim2.new(0, 10, 0, 30)
+ContentContainer.BackgroundTransparency = 1
+ContentContainer.Parent = Frame
+
+-- Fire Button
+FireButton.Size = UDim2.new(0.48, 0, 0, 28)
+FireButton.Position = UDim2.new(0, 0, 0, 0)
+FireButton.Text = "FIRE"
+FireButton.Font = Enum.Font.Code
+FireButton.TextSize = 12
+FireButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+FireButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+FireButton.BorderSizePixel = 1
+FireButton.BorderColor3 = Color3.fromRGB(255, 0, 0)
+FireButton.Parent = ContentContainer
+
+-- Server Wipe Button
+ServerWipeButton.Size = UDim2.new(0.48, 0, 0, 28)
+ServerWipeButton.Position = UDim2.new(0.52, 0, 0, 0)
+ServerWipeButton.Text = "WIPE OFF"
+ServerWipeButton.Font = Enum.Font.Code
+ServerWipeButton.TextSize = 11
+ServerWipeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+ServerWipeButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+ServerWipeButton.BorderSizePixel = 1
+ServerWipeButton.BorderColor3 = Color3.fromRGB(255, 0, 0)
+ServerWipeButton.Parent = ContentContainer
+
+-- Player Label
+PlayerLabel.Size = UDim2.new(0.3, -5, 0, 25)
+PlayerLabel.Position = UDim2.new(0, 0, 0, 35)
+PlayerLabel.Text = "Target:"
+PlayerLabel.Font = Enum.Font.Code
+PlayerLabel.TextSize = 11
+PlayerLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+PlayerLabel.BackgroundTransparency = 1
+PlayerLabel.TextXAlignment = Enum.TextXAlignment.Left
+PlayerLabel.TextYAlignment = Enum.TextYAlignment.Center
+PlayerLabel.Parent = ContentContainer
+
+-- Player TextBox
+PlayerBox.Size = UDim2.new(0.7, 0, 0, 25)
+PlayerBox.Position = UDim2.new(0.3, 0, 0, 35)
+PlayerBox.Text = ""
+PlayerBox.PlaceholderText = "Enter player name..."
+PlayerBox.Font = Enum.Font.Code
+PlayerBox.TextSize = 11
+PlayerBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+PlayerBox.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+PlayerBox.BorderSizePixel = 1
+PlayerBox.BorderColor3 = Color3.fromRGB(255, 0, 0)
+PlayerBox.ClearTextOnFocus = false
+PlayerBox.TextXAlignment = Enum.TextXAlignment.Left
+PlayerBox.Parent = ContentContainer
+
+-- Target Display
+TargetDisplay.Size = UDim2.new(1, 0, 0, 15)
+TargetDisplay.Position = UDim2.new(0, 0, 0, 65)
+TargetDisplay.Text = "No target selected"
+TargetDisplay.Font = Enum.Font.Code
+TargetDisplay.TextSize = 9
+TargetDisplay.TextColor3 = Color3.fromRGB(150, 150, 150)
+TargetDisplay.BackgroundTransparency = 1
+TargetDisplay.TextXAlignment = Enum.TextXAlignment.Center
+TargetDisplay.TextYAlignment = Enum.TextYAlignment.Center
+TargetDisplay.Parent = ContentContainer
+
+-- Status Label
+StatusLabel.Size = UDim2.new(1, 0, 0, 15)
+StatusLabel.Position = UDim2.new(0, 0, 0, 80)
+StatusLabel.Text = "Tool Status: Checking..."
+StatusLabel.Font = Enum.Font.Code
+StatusLabel.TextSize = 9
+StatusLabel.TextColor3 = Color3.fromRGB(255, 255, 0)
+StatusLabel.BackgroundTransparency = 1
+StatusLabel.TextXAlignment = Enum.TextXAlignment.Center
+StatusLabel.TextYAlignment = Enum.TextYAlignment.Center
+StatusLabel.Parent = ContentContainer
+
+-- Wipe Status Label
+WipeStatus.Size = UDim2.new(1, 0, 0, 15)
+WipeStatus.Position = UDim2.new(0, 0, 0, 95)
+WipeStatus.Text = "Wipe Status: Idle"
+WipeStatus.Font = Enum.Font.Code
+WipeStatus.TextSize = 9
+WipeStatus.TextColor3 = Color3.fromRGB(150, 150, 150)
+WipeStatus.BackgroundTransparency = 1
+WipeStatus.TextXAlignment = Enum.TextXAlignment.Center
+WipeStatus.TextYAlignment = Enum.TextYAlignment.Center
+WipeStatus.Parent = ContentContainer
+
+-- Hide Button
+HideButton.Position = UDim2.new(0.05, 0, 0.9, 0)
+HideButton.Size = UDim2.new(0, 50, 0, 30)
+HideButton.Font = Enum.Font.Code
+HideButton.Text = "HIDE"
+HideButton.TextSize = 10
+HideButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+HideButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+HideButton.BorderSizePixel = 1
+HideButton.BorderColor3 = Color3.fromRGB(255, 0, 0)
+HideButton.Parent = ScreenGui
+
+-- Credits
+Credits.Size = UDim2.new(1, 0, 0, 25)
+Credits.Position = UDim2.new(0, 0, 1, -25)
+Credits.Text = "team c00kidd join today\nthis 1s work in pr0gr3ss"
+Credits.Font = Enum.Font.Code
+Credits.TextSize = 9
+Credits.TextColor3 = Color3.fromRGB(150, 150, 150)
+Credits.BackgroundTransparency = 1
+Credits.TextXAlignment = Enum.TextXAlignment.Center
+Credits.TextYAlignment = Enum.TextYAlignment.Center
+Credits.Parent = ContentContainer
+
+-- Services
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local Teams = game:GetService("Teams")
+
+-- Variables
+local targetPlayer = nil
+local lp = Players.LocalPlayer
+local toolCheckConnection = nil
+local serverWiping = false
+local wipeConnection = nil
+local currentWipeTarget = nil
+
+-- Helper function to find closest player match
+local function findClosestPlayer(searchText)
+    if not searchText or searchText == "" then
+        return nil
+    end
+    
+    searchText = searchText:lower()
+    local bestMatch = nil
+    local bestScore = math.huge
+    
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= lp then
+            local username = player.Name:lower()
+            local displayName = player.DisplayName:lower()
+            
+            local usernameScore = math.huge
+            local displayScore = math.huge
+            
+            if username == searchText then
+                usernameScore = 0
+            elseif displayName == searchText then
+                displayScore = 0
+            else
+                if username:find(searchText, 1, true) then
+                    usernameScore = #username - #searchText
+                end
+                if displayName:find(searchText, 1, true) then
+                    displayScore = #displayName - #searchText
+                end
+            end
+            
+            local finalScore = math.min(usernameScore, displayScore)
+            
+            if finalScore < bestScore then
+                bestScore = finalScore
+                bestMatch = player
+            end
+        end
+    end
+    
+    return bestMatch
+end
+
+-- Function to get Towers team players
+local function getTowersPlayers()
+    local towersPlayers = {}
+    local towersTeam = Teams:FindFirstChild("Towers")
+    
+    if towersTeam then
+        for _, player in pairs(Players:GetPlayers()) do
+            if player.Team == towersTeam and player ~= lp and player.Character and player.Character:FindFirstChild("Humanoid") then
+                local humanoid = player.Character.Humanoid
+                if humanoid.Health > 0 then
+                    table.insert(towersPlayers, player)
+                end
+            end
+        end
+    end
+    
+    return towersPlayers
+end
+
+-- Function to check if tool exists
+local function checkToolExists()
+    local backpack = lp:FindFirstChild("Backpack")
+    local character = lp.Character
+    
+    if backpack then
+        local placeObject = backpack:FindFirstChild("Place Object")
+        if placeObject and placeObject:FindFirstChild("Remote") then
+            return placeObject, "Ready (Backpack)"
+        end
+    end
+    
+    if character then
+        local placeObject = character:FindFirstChild("Place Object")
+        if placeObject and placeObject:FindFirstChild("Remote") then
+            return placeObject, "Ready (Equipped)"
+        end
+    end
+    
+    return nil, "Tool Not Found"
+end
+
+-- Function to update tool status
+local function updateToolStatus()
+    local tool, status = checkToolExists()
+    StatusLabel.Text = "Tool Status: " .. status
+    
+    if tool then
+        StatusLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
+        return true
+    else
+        StatusLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
+        return false
+    end
+end
+
+-- Function to get player position
+local function getPlayerPosition(player)
+    if player and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+        return player.Character.HumanoidRootPart.Position
+    end
+    return nil
+end
+
+-- Function to execute remote once
+local function executeRemote(player)
+    if not player then 
+        return false, "No target selected"
+    end
+    
+    local position = getPlayerPosition(player)
+    if not position then 
+        return false, "Target not found or invalid"
+    end
+    
+    local tool, status = checkToolExists()
+    if not tool then 
+        return false, status
+    end
+    
+    local remote = tool:FindFirstChild("Remote")
+    if not remote then 
+        return false, "Remote not found in tool"
+    end
+    
+    local args = {
+        Vector3.new(position.X + 15, position.Y, position.Z)
+    }
+    
+    local success, error = pcall(function()
+        remote:FireServer(unpack(args))
+    end)
+    
+    if success then
+        return true, "Fired successfully!"
+    else
+        return false, "Error: " .. tostring(error)
+    end
+end
+
+-- Server wipe functionality
+local function startServerWipe()
+    if wipeConnection then
+        wipeConnection:Disconnect()
+    end
+    
+    wipeConnection = RunService.Heartbeat:Connect(function()
+        if not serverWiping then
+            if wipeConnection then
+                wipeConnection:Disconnect()
+                wipeConnection = nil
+            end
+            return
+        end
+        
+        local towersPlayers = getTowersPlayers()
+        
+        if #towersPlayers == 0 then
+            -- No more Towers players, auto turn off
+            serverWiping = false
+            ServerWipeButton.Text = "WIPE OFF"
+            ServerWipeButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+            WipeStatus.Text = "Wipe Status: Complete - No Towers players left"
+            WipeStatus.TextColor3 = Color3.fromRGB(0, 255, 0)
+            if wipeConnection then
+                wipeConnection:Disconnect()
+                wipeConnection = nil
+            end
+            return
+        end
+        
+        -- Check if current target is still valid
+        if not currentWipeTarget or not table.find(towersPlayers, currentWipeTarget) then
+            -- Pick a random new target
+            currentWipeTarget = towersPlayers[math.random(1, #towersPlayers)]
+            WipeStatus.Text = "Wipe Status: Targeting " .. currentWipeTarget.DisplayName
+            WipeStatus.TextColor3 = Color3.fromRGB(255, 255, 0)
+        end
+        
+        -- Execute remote on current target
+        executeRemote(currentWipeTarget)
+        
+        wait(0.5) -- 0.5 second delay between fires
+    end)
+end
+
+-- Stop server wipe
+local function stopServerWipe()
+    serverWiping = false
+    currentWipeTarget = nil
+    if wipeConnection then
+        wipeConnection:Disconnect()
+        wipeConnection = nil
+    end
+    ServerWipeButton.Text = "WIPE OFF"
+    ServerWipeButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    WipeStatus.Text = "Wipe Status: Stopped"
+    WipeStatus.TextColor3 = Color3.fromRGB(150, 150, 150)
+end
+
+-- Button flash animation
+local function flashButton(button, color, duration)
+    local originalColor = button.BackgroundColor3
+    button.BackgroundColor3 = color
+    
+    local tween = TweenService:Create(button, 
+        TweenInfo.new(duration or 0.3, Enum.EasingStyle.Quad), 
+        {BackgroundColor3 = originalColor}
+    )
+    tween:Play()
+end
+
+-- Update target display
+local function updateTargetDisplay()
+    if targetPlayer then
+        TargetDisplay.Text = "Target: " .. targetPlayer.DisplayName .. " (@" .. targetPlayer.Name .. ")"
+        TargetDisplay.TextColor3 = Color3.fromRGB(0, 255, 0)
+    else
+        TargetDisplay.Text = "No target selected"
+        TargetDisplay.TextColor3 = Color3.fromRGB(150, 150, 150)
+    end
+end
+
+-- Start tool monitoring
+local function startToolMonitoring()
+    if toolCheckConnection then
+        toolCheckConnection:Disconnect()
+    end
+    
+    toolCheckConnection = RunService.Heartbeat:Connect(function()
+        updateToolStatus()
+        wait(1)
+    end)
+end
+
+-- Player search functionality
+PlayerBox.Changed:Connect(function(property)
+    if property == "Text" then
+        local foundPlayer = findClosestPlayer(PlayerBox.Text)
+        targetPlayer = foundPlayer
+        updateTargetDisplay()
+    end
+end)
+-- Close button functionality
+CloseButton.MouseEnter:Connect(function()
+    CloseButton.BackgroundColor3 = Color3.fromRGB(50, 0, 0)
+end)
+
+CloseButton.MouseLeave:Connect(function()
+    CloseButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+end)
+
+CloseButton.MouseButton1Click:Connect(function()
+    stopServerWipe()
+    if toolCheckConnection then
+        toolCheckConnection:Disconnect()
+    end
+    ScreenGui:Destroy()
+end)
+
+-- Fire button functionality
+FireButton.MouseEnter:Connect(function()
+    FireButton.BackgroundColor3 = Color3.fromRGB(25, 0, 0)
+end)
+
+FireButton.MouseLeave:Connect(function()
+    FireButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+end)
+
+FireButton.MouseButton1Click:Connect(function()
+    local success, message = executeRemote(targetPlayer)
+    
+    if success then
+        flashButton(FireButton, Color3.fromRGB(0, 100, 0), 0.5)
+        StatusLabel.Text = "Tool Status: " .. message
+        StatusLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
+    else
+        flashButton(FireButton, Color3.fromRGB(100, 0, 0), 0.5)
+        StatusLabel.Text = "Error: " .. message
+        StatusLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
+    end
+    
+    wait(2)
+    updateToolStatus()
+end)
+
+-- Server Wipe button functionality
+ServerWipeButton.MouseEnter:Connect(function()
+    ServerWipeButton.BackgroundColor3 = Color3.fromRGB(25, 0, 0)
+end)
+
+ServerWipeButton.MouseLeave:Connect(function()
+    if not serverWiping then
+        ServerWipeButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    end
+end)
+
+ServerWipeButton.MouseButton1Click:Connect(function()
+    if serverWiping then
+        stopServerWipe()
+    else
+        local towersPlayers = getTowersPlayers()
+        if #towersPlayers == 0 then
+            flashButton(ServerWipeButton, Color3.fromRGB(100, 100, 0), 0.5)
+            WipeStatus.Text = "Wipe Status: No Towers players found"
+            WipeStatus.TextColor3 = Color3.fromRGB(255, 255, 0)
+            return
+        end
+        
+        local tool, status = checkToolExists()
+        if not tool then
+            flashButton(ServerWipeButton, Color3.fromRGB(100, 0, 0), 0.5)
+            WipeStatus.Text = "Wipe Status: " .. status
+            WipeStatus.TextColor3 = Color3.fromRGB(255, 0, 0)
+            return
+        end
+        
+        serverWiping = true
+        ServerWipeButton.Text = "WIPE ON"
+        ServerWipeButton.BackgroundColor3 = Color3.fromRGB(25, 0, 0)
+        WipeStatus.Text = "Wipe Status: Starting..."
+        WipeStatus.TextColor3 = Color3.fromRGB(255, 255, 0)
+        startServerWipe()
+    end
+end)
+
+-- Player box hover effects
+PlayerBox.MouseEnter:Connect(function()
+    PlayerBox.BackgroundColor3 = Color3.fromRGB(25, 0, 0)
+end)
+
+PlayerBox.MouseLeave:Connect(function()
+    if not PlayerBox:IsFocused() then
+        PlayerBox.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    end
+end)
+
+PlayerBox.Focused:Connect(function()
+    PlayerBox.BackgroundColor3 = Color3.fromRGB(25, 0, 0)
+end)
+
+PlayerBox.FocusLost:Connect(function()
+    PlayerBox.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+end)
+
+-- Hide functionality
+HideButton.MouseEnter:Connect(function()
+    HideButton.BackgroundColor3 = Color3.fromRGB(25, 0, 0)
+end)
+
+HideButton.MouseLeave:Connect(function()
+    HideButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+end)
+
+HideButton.MouseButton1Click:Connect(function()
+    Frame.Visible = not Frame.Visible
+    if Frame.Visible then
+        HideButton.Text = "HIDE"
+    else
+        HideButton.Text = "SHOW"
+    end
+end)
+
+-- Handle player leaving
+Players.PlayerRemoving:Connect(function(player)
+    if player == targetPlayer then
+        targetPlayer = nil
+        updateTargetDisplay()
+    end
+    if player == currentWipeTarget then
+        currentWipeTarget = nil
+    end
+end)
+
+-- Start monitoring immediately
+startToolMonitoring()
+updateToolStatus()
