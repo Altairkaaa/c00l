@@ -24,10 +24,10 @@ local S = {
     selectedBat         = nil,
     selectedAbility     = "Default",
     spamActive          = false,
-    spamDelay           = 0.05,
+    spamDelay           = 0.000005,
     browserRemote       = nil,
     browserSpamActive   = false,
-    browserSpamDelay    = 0.05,
+    browserSpamDelay    = 0.005,
     -- subspace
     subspaceActive = false,
     -- targeting
@@ -38,7 +38,7 @@ local S = {
     -- autofarm
     autofarmActive      = false,
     autofarmTarget      = nil,
-    farmDelay           = 0.05,  -- [FIX] separate from spamDelay
+    farmDelay           = 0.005,  -- [FIX] separate from spamDelay
 
     -- crash
     crashActive         = false,
