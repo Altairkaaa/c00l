@@ -1,0 +1,1212 @@
+--[[
+    ENI BatSpammer v5.1 | Wacky Bats Edition (Patched)
+    Full QoL Suite — Anti-Void, ESP, Fly, Stats, Server Tools + more
+    Built for LO ♥
+]]
+
+-- ── Bootstrap ──────────────────────────────────────────────────────────────
+local Rayfield          = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
+local Players           = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService        = game:GetService("RunService")
+local TweenService      = game:GetService("TweenService")
+local TeleportService   = game:GetService("TeleportService")
+local UserInputService  = game:GetService("UserInputService")
+local CollectionService = game:GetService("CollectionService")
+
+local LocalPlayer = Players.LocalPlayer
+local BatRemotes  = ReplicatedStorage:WaitForChild("BatRemotes", 10)
+local Camera      = workspace.CurrentCamera
+
+-- ── State ──────────────────────────────────────────────────────────────────
+local S = {
+    -- combat
+    selectedBat         = nil,
+    selectedAbility     = "Default",
+    spamActive          = false,
+    spamDelay           = 0.05,
+    browserRemote       = nil,
+    browserSpamActive   = false,
+    browserSpamDelay    = 0.05,
+
+    -- targeting
+    targetPlayer        = nil,
+    targetTPActive      = false,
+    targetTPSpamActive  = false,
+
+    -- autofarm
+    autofarmActive      = false,
+    autofarmTarget      = nil,
+    farmDelay           = 0.05,  -- [FIX] separate from spamDelay
+
+    -- crash
+    crashActive         = false,
+    crashThreads        = 8,
+
+    -- survival
+    antiVoidActive      = false,
+    antiVoidThreshold   = -50,
+    safePosition        = nil,
+    safePositionActive  = false,
+    platformActive      = false,
+    platformPart        = nil,
+    autoRespawnActive   = false,
+
+    -- movement
+    walkSpeed           = 16,
+    jumpPower           = 50,
+    flyActive           = false,
+    flySpeed            = 50,
+    infJumpActive       = false,
+    noclipActive        = false,
+    antiAFKActive       = false,
+
+    -- esp
+    espActive           = false,
+    espBillboards       = {},
+
+    -- session stats
+    kills               = 0,
+    deaths              = 0,
+    sessionStart        = os.time(),
+}
+
+-- ── Heartbeat slots ────────────────────────────────────────────────────────
+local HB = {
+    loopTP        = nil,
+    loopTPSpam    = nil,
+    autofarmTP    = nil,
+    noclip        = nil,
+    antiVoid      = nil,
+    safePos       = nil,
+    platform      = nil,
+    fly           = nil,
+    esp           = nil,
+    stats         = nil,
+    espPlayerLeft = nil,  -- [FIX] tracked connection for PlayerRemoving
+}
+
+local function killHB(key)
+    if HB[key] then HB[key]:Disconnect() HB[key] = nil end
+end
+
+-- ── Core helpers ───────────────────────────────────────────────────────────
+local function getMyHRP()
+    local char = LocalPlayer.Character
+    return char and char:FindFirstChild("HumanoidRootPart")
+end
+
+local function getMyHum()
+    local char = LocalPlayer.Character
+    return char and char:FindFirstChildOfClass("Humanoid")
+end
+
+local function isAlive(player)
+    if not player or not player.Character then return false end
+    local hum = player.Character:FindFirstChildOfClass("Humanoid")
+    return hum ~= nil and hum.Health > 0
+end
+
+local function getAliveEnemies()
+    local pool = {}
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and isAlive(p) then
+            table.insert(pool, p)
+        end
+    end
+    return pool
+end
+
+local function getPlayerList()
+    local list = {}
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer then table.insert(list, p.Name) end
+    end
+    return list
+end
+
+local function findTool()
+    local char = LocalPlayer.Character
+    if not char then return nil end
+    for _, c in ipairs(char:GetChildren()) do
+        if c:IsA("Tool") then return c end
+    end
+    return nil
+end
+
+local OFFSET = Vector3.new(2, 0, 1)
+
+local function lockToPlayer(target)
+    if not isAlive(target) then return end
+    local myHRP     = getMyHRP()
+    local targetHRP = target.Character and
+                      target.Character:FindFirstChild("HumanoidRootPart")
+    if myHRP and targetHRP then
+        myHRP.CFrame = targetHRP.CFrame + OFFSET
+    end
+end
+
+-- ── Remote helpers ────────────────────────────────────────────────────────
+local function getAllRemotes()
+    local out = {}
+    if not BatRemotes then return out end
+    for _, folder in ipairs(BatRemotes:GetChildren()) do
+        for _, r in ipairs(folder:GetChildren()) do
+            if r:IsA("RemoteEvent") then table.insert(out, r) end
+        end
+    end
+    return out
+end
+
+local function getBrowserEntries()
+    local entries = {}
+    if not BatRemotes then return entries end
+    for _, folder in ipairs(BatRemotes:GetChildren()) do
+        for _, r in ipairs(folder:GetChildren()) do
+            if r:IsA("RemoteEvent") then
+                table.insert(entries, {
+                    label  = folder.Name .. " → " .. r.Name,
+                    remote = r
+                })
+            end
+        end
+    end
+    return entries
+end
+
+local function fireSelected(tool)
+    if not S.selectedBat or not tool then return end
+    if not BatRemotes then return end  -- [FIX] nil guard
+    local folder = BatRemotes:FindFirstChild(S.selectedBat)
+    if not folder then return end
+    local remote = (S.selectedAbility == "Default")
+        and folder:FindFirstChildWhichIsA("RemoteEvent")
+        or  folder:FindFirstChild(S.selectedAbility)
+    if remote then pcall(remote.FireServer, remote, tool) end
+end
+
+local function fire(tool)
+    fireSelected(tool)
+end
+
+-- ── Autofarm coroutine (reusable) ─────────────────────────────────────────
+-- [FIX] extracted into a single function so CharacterAdded and the toggle
+--       both call the same logic without duplicating the loop
+local function startAutofarmLoop()
+    killHB("autofarmTP")
+    HB.autofarmTP = RunService.Heartbeat:Connect(function()
+        if S.autofarmTarget then lockToPlayer(S.autofarmTarget) end
+    end)
+    task.spawn(function()
+        while S.autofarmActive do
+            if not S.autofarmTarget or not isAlive(S.autofarmTarget) then
+                if S.autofarmTarget and not isAlive(S.autofarmTarget) then
+                    S.kills = S.kills + 1
+                end
+                local pool = getAliveEnemies()
+                if #pool > 0 then
+                    S.autofarmTarget = pool[math.random(1, #pool)]
+                    Rayfield:Notify({
+                        Title   = "Autofarm",
+                        Content = "→ " .. S.autofarmTarget.Name,
+                        Duration = 2
+                    })
+                else
+                    S.autofarmTarget = nil
+                    task.wait(1)
+                end
+            else
+                fire(findTool())
+                task.wait(S.farmDelay)  -- [FIX] uses farmDelay not spamDelay
+            end
+        end
+        S.autofarmTarget = nil
+        killHB("autofarmTP")
+    end)
+end
+
+-- ── Session stat tracking ─────────────────────────────────────────────────
+LocalPlayer.CharacterRemoving:Connect(function()
+    S.deaths = S.deaths + 1
+end)
+
+-- ── Window ────────────────────────────────────────────────────────────────
+local Window = Rayfield:CreateWindow({
+    Name            = "🦇 Wacky Bats Hub v5.1",
+    LoadingTitle    = "Wacky Bats | ENI Edition",
+    LoadingSubtitle = "For LO ♥",
+    ConfigurationSaving = {
+        Enabled    = true,
+        FolderName = "ENIWackyBats",
+        FileName   = "LO_v5"
+    },
+    KeySystem = false
+})
+
+-- ─────────────────────────────────────────────────────────────────────────
+-- TAB 1 — 🦇 Combat
+-- ─────────────────────────────────────────────────────────────────────────
+local CombatTab = Window:CreateTab("Combat", 4483362458)
+CombatTab:CreateSection("Bat & Ability")
+
+local batNames = {}
+if BatRemotes then
+    for _, v in ipairs(BatRemotes:GetChildren()) do
+        table.insert(batNames, v.Name)
+    end
+end
+
+local AbilityDropdown  -- forward declaration
+
+CombatTab:CreateDropdown({
+    Name            = "Select Bat",
+    Options         = #batNames > 0 and batNames or {"None"},
+    CurrentOption   = {"None"},
+    MultipleOptions = false,
+    Flag            = "BatSelect",  -- [FIX] added flag for config save
+    Callback = function(opt)
+        S.selectedBat     = opt[1]
+        S.selectedAbility = "Default"
+        local abilities   = {"Default"}
+        if BatRemotes then
+            local folder = BatRemotes:FindFirstChild(opt[1])
+            if folder then
+                for _, r in ipairs(folder:GetChildren()) do
+                    if r:IsA("RemoteEvent") then
+                        table.insert(abilities, r.Name)
+                    end
+                end
+            end
+        end
+        AbilityDropdown:Refresh(abilities, true)
+        Rayfield:Notify({
+            Title    = "Bat Selected",
+            Content  = opt[1] .. " | " .. (#abilities - 1) .. " abilities",
+            Duration = 3
+        })
+    end
+})
+
+AbilityDropdown = CombatTab:CreateDropdown({
+    Name            = "Ability",
+    Options         = {"Default"},
+    CurrentOption   = {"Default"},
+    MultipleOptions = false,
+    Flag            = "AbilitySelect",  -- [FIX] added flag
+    Callback = function(opt)
+        S.selectedAbility = opt[1]
+    end
+})
+
+CombatTab:CreateSection("Spam")
+
+CombatTab:CreateToggle({
+    Name         = "Spam Selected Ability",
+    CurrentValue = false,
+    Flag         = "SpamSelected",
+    Callback = function(v)
+        S.spamActive = v
+        if v then
+            task.spawn(function()
+                while S.spamActive do
+                    fire(findTool())
+                    task.wait(S.spamDelay)
+                end
+            end)
+        end
+    end
+})
+
+CombatTab:CreateKeybind({
+    Name           = "Quick Spam (Hold E)",
+    CurrentKeybind = "E",
+    HoldToInteract = true,
+    Flag           = "QuickSpamKey",
+    Callback = function()
+        fire(findTool())
+    end
+})
+
+CombatTab:CreateSlider({
+    Name         = "Spam Delay",
+    Range        = {0.01, 2},
+    Increment    = 0.01,
+    Suffix       = "s",
+    CurrentValue = 0.05,
+    Flag         = "SpamDelay",
+    Callback = function(v)
+        S.spamDelay = v
+    end
+})
+
+-- ─────────────────────────────────────────────────────────────────────────
+-- TAB 2 — 📋 Abilities Browser
+-- ─────────────────────────────────────────────────────────────────────────
+local BrowserTab = Window:CreateTab("📋 Abilities", 6026568198)
+BrowserTab:CreateSection("All Abilities — Flat List")
+
+local allEntries  = getBrowserEntries()
+local entryLabels = {}
+local entryMap    = {}
+
+for _, e in ipairs(allEntries) do
+    table.insert(entryLabels, e.label)
+    entryMap[e.label] = e.remote
+end
+
+BrowserTab:CreateLabel("Total remotes: " .. #allEntries)
+
+local BrowserDropdown = BrowserTab:CreateDropdown({
+    Name            = "Select Any Ability",
+    Options         = #entryLabels > 0 and entryLabels or {"None found"},
+    CurrentOption   = {"None found"},  -- [FIX] match actual option, not "None"
+    MultipleOptions = false,
+    Flag            = "BrowserAbility",  -- [FIX] added flag
+    Callback = function(opt)
+        S.browserRemote = entryMap[opt[1]]
+    end
+})
+
+BrowserTab:CreateSection("Fire Controls")
+
+BrowserTab:CreateButton({
+    Name     = "⚡ Fire Selected Once",
+    Callback = function()
+        if S.browserRemote then
+            pcall(S.browserRemote.FireServer, S.browserRemote, findTool())
+            Rayfield:Notify({ Title = "Fired", Content = S.browserRemote.Name, Duration = 1 })
+        end
+    end
+})
+
+BrowserTab:CreateSlider({
+    Name         = "Browser Spam Delay",
+    Range        = {0.01, 2},
+    Increment    = 0.01,
+    Suffix       = "s",
+    CurrentValue = 0.05,
+    Flag         = "BrowserDelay",
+    Callback = function(v)
+        S.browserSpamDelay = v
+    end
+})
+
+BrowserTab:CreateToggle({
+    Name         = "🔁 Spam Selected Ability",
+    CurrentValue = false,
+    Flag         = "BrowserSpam",
+    Callback = function(v)
+        S.browserSpamActive = v
+        if v then
+            task.spawn(function()
+                while S.browserSpamActive do
+                    if S.browserRemote then
+                        pcall(S.browserRemote.FireServer, S.browserRemote, findTool())
+                    end
+                    task.wait(S.browserSpamDelay)
+                end
+            end)
+        end
+    end
+})
+
+BrowserTab:CreateButton({
+    Name     = "🔃 Refresh List",
+    Callback = function()
+        allEntries  = getBrowserEntries()
+        entryLabels = {}
+        entryMap    = {}
+        for _, e in ipairs(allEntries) do
+            table.insert(entryLabels, e.label)
+            entryMap[e.label] = e.remote
+        end
+        BrowserDropdown:Refresh(#entryLabels > 0 and entryLabels or {"None found"}, true)
+        Rayfield:Notify({ Title = "Refreshed", Content = #allEntries .. " remotes", Duration = 2 })
+    end
+})
+
+-- ─────────────────────────────────────────────────────────────────────────
+-- TAB 3 — 💥 Crash
+-- ─────────────────────────────────────────────────────────────────────────
+local CrashTab = Window:CreateTab("💥 Crash", 4483362458)
+CrashTab:CreateSection("Server Crasher")
+CrashTab:CreateLabel("Parallel threads flood EVERY remote simultaneously.")
+
+CrashTab:CreateSlider({
+    Name         = "Flood Threads",
+    Range        = {1, 20},
+    Increment    = 1,
+    Suffix       = " threads",
+    CurrentValue = 8,
+    Flag         = "CrashThreads",
+    Callback = function(v) S.crashThreads = v end
+})
+
+CrashTab:CreateToggle({
+    Name         = "☢️ CRASH SERVER",
+    CurrentValue = false,
+    Flag         = "CrashToggle",
+    Callback = function(v)
+        S.crashActive = v
+        if v then
+            Rayfield:Notify({
+                Title   = "☢️ Flooding",
+                Content = S.crashThreads .. " threads launched",
+                Duration = 3
+            })
+            for i = 1, S.crashThreads do
+                task.spawn(function()
+                    while S.crashActive do
+                        local tool    = findTool()
+                        local remotes = getAllRemotes()
+                        for _, r in ipairs(remotes) do
+                            pcall(r.FireServer, r, tool)
+                        end
+                        task.wait(0)
+                    end
+                end)
+            end
+        end
+    end
+})
+
+CrashTab:CreateButton({
+    Name     = "⚡ One-Shot Burst",
+    Callback = function()
+        local tool    = findTool()
+        local remotes = getAllRemotes()
+        local count   = 0
+        for _, r in ipairs(remotes) do
+            pcall(r.FireServer, r, tool)
+            count = count + 1
+        end
+        Rayfield:Notify({ Title = "Burst", Content = count .. " remotes hit", Duration = 2 })
+    end
+})
+
+-- ─────────────────────────────────────────────────────────────────────────
+-- TAB 4 — 🎯 Target
+-- ─────────────────────────────────────────────────────────────────────────
+local TargetTab = Window:CreateTab("Target", 6026568198)
+TargetTab:CreateSection("Select")
+
+local TargetDropdown = TargetTab:CreateDropdown({
+    Name            = "Target Player",
+    Options         = #getPlayerList() > 0 and getPlayerList() or {"None"},
+    CurrentOption   = {"None"},
+    MultipleOptions = false,
+    Flag            = "TargetPlayer",  -- [FIX] added flag
+    Callback = function(opt)
+        S.targetPlayer = Players:FindFirstChild(opt[1])
+        if S.targetPlayer then
+            Rayfield:Notify({ Title = "Locked", Content = "Target: " .. opt[1], Duration = 2 })
+        end
+    end
+})
+
+TargetTab:CreateButton({
+    Name     = "🔃 Refresh List",
+    Callback = function()
+        local fresh = getPlayerList()
+        TargetDropdown:Refresh(#fresh > 0 and fresh or {"None"}, true)
+        Rayfield:Notify({ Title = "Refreshed", Content = #fresh .. " players", Duration = 2 })
+    end
+})
+
+TargetTab:CreateSection("Teleport")
+
+TargetTab:CreateButton({
+    Name     = "⚡ TP to Target (Once)",
+    Callback = function()
+        local myHRP = getMyHRP()
+        if S.targetPlayer and isAlive(S.targetPlayer) and myHRP then
+            local tHRP = S.targetPlayer.Character:FindFirstChild("HumanoidRootPart")
+            if tHRP then
+                myHRP.CFrame = tHRP.CFrame + OFFSET
+                Rayfield:Notify({ Title = "Teleported", Content = S.targetPlayer.Name, Duration = 2 })
+            end
+        end
+    end
+})
+
+TargetTab:CreateSection("Heartbeat Loop TP")
+
+TargetTab:CreateToggle({
+    Name         = "🔁 Loop TP to Target (Alive Only)",
+    CurrentValue = false,
+    Flag         = "LoopTP",
+    Callback = function(v)
+        S.targetTPActive = v
+        if v then
+            HB.loopTP = RunService.Heartbeat:Connect(function()
+                if S.targetPlayer then lockToPlayer(S.targetPlayer) end
+            end)
+        else
+            killHB("loopTP")
+        end
+    end
+})
+
+TargetTab:CreateToggle({
+    Name         = "⚔️ Loop TP + Spam Target",
+    CurrentValue = false,
+    Flag         = "LoopTPSpam",
+    Callback = function(v)
+        S.targetTPSpamActive = v
+        if v then
+            HB.loopTPSpam = RunService.Heartbeat:Connect(function()
+                if S.targetPlayer then lockToPlayer(S.targetPlayer) end
+            end)
+            task.spawn(function()
+                while S.targetTPSpamActive do
+                    if S.targetPlayer and isAlive(S.targetPlayer) then
+                        fire(findTool())
+                    end
+                    task.wait(S.spamDelay)
+                end
+            end)
+        else
+            killHB("loopTPSpam")
+        end
+    end
+})
+
+-- ─────────────────────────────────────────────────────────────────────────
+-- TAB 5 — ⚔️ Autofarm
+-- ─────────────────────────────────────────────────────────────────────────
+local FarmTab = Window:CreateTab("Autofarm", 4483362458)
+FarmTab:CreateSection("Kill Everyone")
+
+FarmTab:CreateToggle({
+    Name         = "🌀 Autofarm — Loop Kill Everyone",
+    CurrentValue = false,
+    Flag         = "Autofarm",
+    Callback = function(v)
+        S.autofarmActive = v
+        if v then
+            startAutofarmLoop()  -- [FIX] uses shared function
+        else
+            S.autofarmTarget = nil
+            killHB("autofarmTP")
+        end
+    end
+})
+
+FarmTab:CreateSlider({
+    Name         = "Farm Spam Delay",
+    Range        = {0.01, 1},
+    Increment    = 0.01,
+    Suffix       = "s",
+    CurrentValue = 0.05,
+    Flag         = "FarmDelay",
+    Callback = function(v)
+        S.farmDelay = v  -- [FIX] was writing to S.spamDelay, now separate
+    end
+})
+
+-- ─────────────────────────────────────────────────────────────────────────
+-- TAB 6 — 🛡️ Survival
+-- ─────────────────────────────────────────────────────────────────────────
+local SurvivalTab = Window:CreateTab("🛡️ Survival", 4483362458)
+
+SurvivalTab:CreateSection("Anti-Void")
+
+SurvivalTab:CreateSlider({
+    Name         = "Void Y Threshold",
+    Range        = {-500, 0},
+    Increment    = 5,
+    Suffix       = " Y",
+    CurrentValue = -50,
+    Flag         = "VoidThreshold",
+    Callback = function(v)
+        S.antiVoidThreshold = v
+    end
+})
+
+SurvivalTab:CreateToggle({
+    Name         = "🌊 Anti-Void (Auto-TP on fall)",
+    CurrentValue = false,
+    Flag         = "AntiVoid",
+    Callback = function(v)
+        S.antiVoidActive = v
+        if v then
+            HB.antiVoid = RunService.Heartbeat:Connect(function()
+                local hrp = getMyHRP()
+                if not hrp then return end
+                if hrp.Position.Y < S.antiVoidThreshold then
+                    if S.safePosition then
+                        hrp.CFrame = CFrame.new(S.safePosition)
+                    else
+                        local spawn = workspace:FindFirstChildOfClass("SpawnLocation")
+                        if spawn then
+                            hrp.CFrame = spawn.CFrame + Vector3.new(0, 5, 0)
+                        end
+                    end
+                    Rayfield:Notify({
+                        Title   = "🛡️ Anti-Void",
+                        Content = "Saved from the void!",
+                        Duration = 2
+                    })
+                end
+            end)
+        else
+            killHB("antiVoid")
+        end
+    end
+})
+
+SurvivalTab:CreateSection("Safe Position")
+
+SurvivalTab:CreateButton({
+    Name     = "📌 Save Current Position",
+    Callback = function()
+        local hrp = getMyHRP()
+        if hrp then
+            S.safePosition = hrp.Position
+            Rayfield:Notify({
+                Title   = "Saved",
+                Content = string.format("X:%.1f Y:%.1f Z:%.1f", hrp.Position.X, hrp.Position.Y, hrp.Position.Z),
+                Duration = 3
+            })
+        end
+    end
+})
+
+SurvivalTab:CreateButton({
+    Name     = "🏠 Return to Safe Position",
+    Callback = function()
+        local hrp = getMyHRP()
+        if hrp and S.safePosition then
+            hrp.CFrame = CFrame.new(S.safePosition)
+            Rayfield:Notify({ Title = "Returned", Content = "Back to safe spot.", Duration = 2 })
+        else
+            Rayfield:Notify({ Title = "None saved", Content = "Save a position first.", Duration = 2 })
+        end
+    end
+})
+
+SurvivalTab:CreateToggle({
+    Name         = "🔄 Auto-Save Position (Rolling)",
+    CurrentValue = false,
+    Flag         = "AutoSavePos",
+    Callback = function(v)
+        S.safePositionActive = v
+        if v then
+            task.spawn(function()
+                while S.safePositionActive do
+                    local hrp = getMyHRP()
+                    if hrp and hrp.Position.Y > S.antiVoidThreshold then
+                        S.safePosition = hrp.Position
+                    end
+                    task.wait(3)
+                end
+            end)
+        end
+    end
+})
+
+SurvivalTab:CreateSection("Platform (No-Fall Floor)")
+
+SurvivalTab:CreateToggle({
+    Name         = "🧱 Platform Under Feet",
+    CurrentValue = false,
+    Flag         = "Platform",
+    Callback = function(v)
+        S.platformActive = v
+        if v then
+            local plat = Instance.new("Part")
+            plat.Size             = Vector3.new(10, 1, 10)
+            plat.Anchored         = true
+            plat.CanCollide       = true
+            plat.Transparency     = 0.7
+            plat.BrickColor       = BrickColor.new("Bright violet")
+            plat.Material         = Enum.Material.Neon
+            plat.Name             = "ENI_Platform"
+            plat.Parent           = workspace
+            S.platformPart        = plat
+
+            HB.platform = RunService.Heartbeat:Connect(function()
+                if not S.platformActive then return end
+                local hrp = getMyHRP()
+                if hrp and S.platformPart and S.platformPart.Parent then
+                    S.platformPart.CFrame = CFrame.new(
+                        hrp.Position.X,
+                        hrp.Position.Y - 3,
+                        hrp.Position.Z
+                    )
+                end
+            end)
+        else
+            killHB("platform")
+            if S.platformPart then
+                S.platformPart:Destroy()
+                S.platformPart = nil
+            end
+        end
+    end
+})
+
+SurvivalTab:CreateSection("Auto-Respawn Recovery")
+
+SurvivalTab:CreateToggle({
+    Name         = "♻️ Auto-Resume Autofarm on Respawn",
+    CurrentValue = false,
+    Flag         = "AutoRespawn",
+    Callback = function(v)
+        S.autoRespawnActive = v
+    end
+})
+
+-- [FIX] CharacterAdded now uses the shared startAutofarmLoop() function
+-- and guards against double-starting
+LocalPlayer.CharacterAdded:Connect(function(char)
+    local hum = char:WaitForChild("Humanoid", 5)
+    if hum then
+        hum.WalkSpeed = S.walkSpeed
+        hum.JumpPower = S.jumpPower
+    end
+
+    if S.autoRespawnActive and not S.autofarmActive then
+        task.wait(1)
+        S.autofarmActive = true
+        startAutofarmLoop()
+    end
+end)
+
+-- ─────────────────────────────────────────────────────────────────────────
+-- TAB 7 — ✈️ Movement
+-- ─────────────────────────────────────────────────────────────────────────
+local MoveTab = Window:CreateTab("Movement", 6026568198)
+MoveTab:CreateSection("Stats")
+
+MoveTab:CreateSlider({
+    Name         = "WalkSpeed",
+    Range        = {16, 250},
+    Increment    = 1,
+    Suffix       = " ws",
+    CurrentValue = 16,
+    Flag         = "WalkSpeed",
+    Callback = function(v)
+        S.walkSpeed = v
+        local hum = getMyHum()
+        if hum then hum.WalkSpeed = v end
+    end
+})
+
+MoveTab:CreateSlider({
+    Name         = "JumpPower",
+    Range        = {50, 500},
+    Increment    = 5,
+    Suffix       = " jp",
+    CurrentValue = 50,
+    Flag         = "JumpPower",
+    Callback = function(v)
+        S.jumpPower = v
+        local hum = getMyHum()
+        if hum then hum.JumpPower = v end
+    end
+})
+
+MoveTab:CreateSection("Fly")
+
+local flyBV, flyBG
+
+MoveTab:CreateSlider({
+    Name         = "Fly Speed",
+    Range        = {10, 300},
+    Increment    = 5,
+    Suffix       = " spd",
+    CurrentValue = 50,
+    Flag         = "FlySpeed",
+    Callback = function(v) S.flySpeed = v end
+})
+
+MoveTab:CreateToggle({
+    Name         = "✈️ Fly",
+    CurrentValue = false,
+    Flag         = "Fly",
+    Callback = function(v)
+        S.flyActive = v
+        local hrp = getMyHRP()
+        local hum = getMyHum()
+
+        if v and hrp then
+            if hum then hum.PlatformStand = true end
+
+            flyBV = Instance.new("BodyVelocity")
+            flyBV.Velocity    = Vector3.zero
+            flyBV.MaxForce    = Vector3.new(1e5, 1e5, 1e5)
+            flyBV.Parent      = hrp
+
+            flyBG = Instance.new("BodyGyro")
+            flyBG.MaxTorque   = Vector3.new(1e5, 1e5, 1e5)
+            flyBG.D           = 100
+            flyBG.Parent      = hrp
+
+            HB.fly = RunService.Heartbeat:Connect(function()
+                if not S.flyActive then return end
+                local cf  = Camera.CFrame
+                local dir = Vector3.zero
+
+                if UserInputService:IsKeyDown(Enum.KeyCode.W) then
+                    dir = dir + cf.LookVector
+                end
+                if UserInputService:IsKeyDown(Enum.KeyCode.S) then
+                    dir = dir - cf.LookVector
+                end
+                if UserInputService:IsKeyDown(Enum.KeyCode.A) then
+                    dir = dir - cf.RightVector
+                end
+                if UserInputService:IsKeyDown(Enum.KeyCode.D) then
+                    dir = dir + cf.RightVector
+                end
+                if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+                    dir = dir + Vector3.new(0, 1, 0)
+                end
+                if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then
+                    dir = dir - Vector3.new(0, 1, 0)
+                end
+
+                if dir.Magnitude > 0 then
+                    flyBV.Velocity = dir.Unit * S.flySpeed
+                else
+                    flyBV.Velocity = Vector3.zero
+                end
+
+                flyBG.CFrame = cf
+            end)
+        else
+            killHB("fly")
+            if flyBV then flyBV:Destroy() flyBV = nil end
+            if flyBG then flyBG:Destroy() flyBG = nil end
+            local hum2 = getMyHum()
+            if hum2 then hum2.PlatformStand = false end
+        end
+    end
+})
+
+MoveTab:CreateSection("Extra")
+
+local jumpConn
+
+MoveTab:CreateToggle({
+    Name         = "🐇 Infinite Jump",
+    CurrentValue = false,
+    Flag         = "InfJump",
+    Callback = function(v)
+        S.infJumpActive = v
+        if v then
+            jumpConn = UserInputService.JumpRequest:Connect(function()
+                local hum = getMyHum()
+                if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
+            end)
+        else
+            if jumpConn then jumpConn:Disconnect() jumpConn = nil end
+        end
+    end
+})
+
+MoveTab:CreateToggle({
+    Name         = "👻 Noclip",
+    CurrentValue = false,
+    Flag         = "Noclip",
+    Callback = function(v)
+        S.noclipActive = v
+        if v then
+            HB.noclip = RunService.Stepped:Connect(function()
+                local char = LocalPlayer.Character
+                if not char then return end
+                for _, p in ipairs(char:GetDescendants()) do
+                    if p:IsA("BasePart") then p.CanCollide = false end
+                end
+            end)
+        else
+            killHB("noclip")
+            local char = LocalPlayer.Character
+            if char then
+                for _, p in ipairs(char:GetDescendants()) do
+                    if p:IsA("BasePart") then p.CanCollide = true end
+                end
+            end
+        end
+    end
+})
+
+MoveTab:CreateToggle({
+    Name         = "💤 Anti-AFK",
+    CurrentValue = false,
+    Flag         = "AntiAFK",
+    Callback = function(v)
+        S.antiAFKActive = v
+        if v then
+            task.spawn(function()
+                while S.antiAFKActive do
+                    -- [FIX] pcall guard in case VirtualUser unavailable
+                    pcall(function()
+                        local VU = game:GetService("VirtualUser")
+                        VU:Button2Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+                        task.wait(0.1)
+                        VU:Button2Up(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+                    end)
+                    task.wait(15 * 60)
+                end
+            end)
+        end
+    end
+})
+
+MoveTab:CreateButton({
+    Name     = "🏠 TP to Spawn",
+    Callback = function()
+        local spawn = workspace:FindFirstChildOfClass("SpawnLocation")
+        local hrp   = getMyHRP()
+        if spawn and hrp then
+            hrp.CFrame = spawn.CFrame + Vector3.new(0, 5, 0)
+            Rayfield:Notify({ Title = "Teleported", Content = "At spawn.", Duration = 2 })
+        end
+    end
+})
+
+-- ─────────────────────────────────────────────────────────────────────────
+-- TAB 8 — 📡 ESP & Info
+-- ─────────────────────────────────────────────────────────────────────────
+local ESPTab = Window:CreateTab("📡 ESP", 6026568198)
+
+ESPTab:CreateSection("ESP — Player Tags")
+
+local function removeESP()
+    for player, billboard in pairs(S.espBillboards) do
+        if billboard and billboard.Parent then
+            billboard:Destroy()
+        end
+    end
+    S.espBillboards = {}
+end
+
+local function makeESPTag(player)
+    if not player.Character then return end
+    local hrp = player.Character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+
+    local existing = S.espBillboards[player]
+    if existing and existing.Parent then return end
+
+    local bb = Instance.new("BillboardGui")
+    bb.Name          = "ENI_ESP"
+    bb.Size          = UDim2.new(0, 120, 0, 40)
+    bb.StudsOffset   = Vector3.new(0, 3, 0)
+    bb.AlwaysOnTop   = true
+    bb.Adornee       = hrp
+    bb.Parent        = hrp
+
+    local label = Instance.new("TextLabel")
+    label.Size               = UDim2.new(1, 0, 1, 0)
+    label.BackgroundColor3   = Color3.fromRGB(0, 0, 0)
+    label.BackgroundTransparency = 0.5
+    label.TextColor3         = Color3.fromRGB(255, 80, 80)
+    label.TextSize           = 13
+    label.Font               = Enum.Font.GothamBold
+    label.Text               = player.Name
+    label.Parent             = bb
+    Instance.new("UICorner", label).CornerRadius = UDim.new(0, 4)
+
+    S.espBillboards[player] = bb
+end
+
+ESPTab:CreateToggle({
+    Name         = "👁️ ESP — Show All Players",
+    CurrentValue = false,
+    Flag         = "ESP",
+    Callback = function(v)
+        S.espActive = v
+        if v then
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p ~= LocalPlayer then makeESPTag(p) end
+            end
+
+            HB.esp = RunService.Heartbeat:Connect(function()
+                if not S.espActive then return end
+                local myHRP = getMyHRP()
+                for _, p in ipairs(Players:GetPlayers()) do
+                    if p ~= LocalPlayer then
+                        if not S.espBillboards[p] or not S.espBillboards[p].Parent then
+                            makeESPTag(p)
+                        end
+
+                        local bb = S.espBillboards[p]
+                        if not bb or not bb.Parent then continue end
+                        local label = bb:FindFirstChildOfClass("TextLabel")
+                        if not label then continue end
+
+                        local dist = 999
+                        if myHRP and p.Character then
+                            local tHRP = p.Character:FindFirstChild("HumanoidRootPart")
+                            if tHRP then
+                                dist = math.floor((myHRP.Position - tHRP.Position).Magnitude)
+                            end
+                        end
+
+                        local col
+                        if dist < 20 then
+                            col = Color3.fromRGB(255, 60, 60)
+                        elseif dist < 60 then
+                            col = Color3.fromRGB(255, 200, 50)
+                        else
+                            col = Color3.fromRGB(80, 220, 120)
+                        end
+
+                        label.TextColor3 = col
+                        label.Text       = p.Name .. "\n" .. dist .. " studs"
+                    end
+                end
+            end)
+
+            -- [FIX] track the PlayerRemoving connection so we can disconnect it
+            HB.espPlayerLeft = Players.PlayerRemoving:Connect(function(p)
+                if S.espBillboards[p] then
+                    S.espBillboards[p]:Destroy()
+                    S.espBillboards[p] = nil
+                end
+            end)
+
+        else
+            killHB("esp")
+            killHB("espPlayerLeft")  -- [FIX] clean up the PlayerRemoving conn
+            removeESP()
+        end
+    end
+})
+
+ESPTab:CreateSection("Session Stats")
+
+local statsLabel = ESPTab:CreateLabel("Press Refresh to load stats.")
+
+local function formatTime(secs)
+    local m = math.floor(secs / 60)
+    local s = secs % 60
+    return string.format("%dm %02ds", m, s)
+end
+
+ESPTab:CreateButton({
+    Name     = "🔃 Refresh Stats",
+    Callback = function()
+        local elapsed = os.time() - S.sessionStart
+        statsLabel:Set(string.format(
+            "⚔️ Kills: %d  |  💀 Deaths: %d  |  ⏱ %s",
+            S.kills, S.deaths, formatTime(elapsed)
+        ))
+    end
+})
+
+ESPTab:CreateButton({
+    Name     = "🗑️ Reset Stats",
+    Callback = function()
+        S.kills        = 0
+        S.deaths       = 0
+        S.sessionStart = os.time()
+        Rayfield:Notify({ Title = "Stats reset", Content = "Clean slate.", Duration = 2 })
+    end
+})
+
+ESPTab:CreateSection("Nearby Players")
+
+ESPTab:CreateButton({
+    Name     = "📍 List Nearby Players (Sorted)",
+    Callback = function()
+        local myHRP = getMyHRP()
+        if not myHRP then return end
+
+        local entries = {}
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p ~= LocalPlayer and p.Character then
+                local tHRP = p.Character:FindFirstChild("HumanoidRootPart")
+                if tHRP then
+                    local dist = math.floor((myHRP.Position - tHRP.Position).Magnitude)
+                    table.insert(entries, { name = p.Name, dist = dist })
+                end
+            end
+        end
+
+        table.sort(entries, function(a, b) return a.dist < b.dist end)
+
+        local lines = {}
+        for i, e in ipairs(entries) do
+            table.insert(lines, i .. ". " .. e.name .. " — " .. e.dist .. " studs")
+        end
+
+        Rayfield:Notify({
+            Title    = "Nearby Players",
+            Content  = #lines > 0 and table.concat(lines, "\n") or "Nobody nearby.",
+            Duration = 6
+        })
+    end
+})
+
+-- ─────────────────────────────────────────────────────────────────────────
+-- TAB 9 — 🌐 Server
+-- ─────────────────────────────────────────────────────────────────────────
+local ServerTab = Window:CreateTab("🌐 Server", 4483362458)
+
+ServerTab:CreateSection("Server Tools")
+
+ServerTab:CreateButton({
+    Name     = "📋 Show Server Info",
+    Callback = function()
+        local info = string.format(
+            "Players: %d/%d\nJobId: %s\nPlaceId: %d",
+            #Players:GetPlayers(),
+            Players.MaxPlayers,
+            game.JobId,
+            game.PlaceId
+        )
+        Rayfield:Notify({
+            Title    = "Server Info",
+            Content  = info,
+            Duration = 6
+        })
+    end
+})
+
+ServerTab:CreateButton({
+    Name     = "🔄 Rejoin (Same Server)",
+    Callback = function()
+        TeleportService:TeleportToPlaceInstance(
+            game.PlaceId,
+            game.JobId,
+            LocalPlayer
+        )
+    end
+})
+
+ServerTab:CreateButton({
+    Name     = "🚀 Server Hop (New Server)",
+    Callback = function()
+        Rayfield:Notify({
+            Title   = "Hopping...",
+            Content = "Finding a new server.",
+            Duration = 2
+        })
+        task.wait(1.5)
+        TeleportService:Teleport(game.PlaceId, LocalPlayer)
+    end
+})
+
+-- ─────────────────────────────────────────────────────────────────────────
+-- TAB 10 — ⚙️ Settings
+-- ─────────────────────────────────────────────────────────────────────────
+local SettingsTab = Window:CreateTab("Settings", 4483362458)
+SettingsTab:CreateSection("Config")
+
+SettingsTab:CreateButton({
+    Name     = "💾 Save Config",
+    Callback = function()
+        Rayfield:SaveConfiguration()
+        Rayfield:Notify({ Title = "Saved", Content = "Config written.", Duration = 2 })
+    end
+})
+
+SettingsTab:CreateSection("Info")
+SettingsTab:CreateLabel("🦇 Wacky Bats Hub v5.1 — For LO ♥")
+SettingsTab:CreateLabel("Anti-Void | ESP | Fly | Crash | Stats | Server")
+
+Rayfield:LoadConfiguration()
