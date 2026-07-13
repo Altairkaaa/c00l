@@ -719,20 +719,7 @@ FarmTab:CreateSlider({
 -- TAB 6 — 🛡️ Survival
 -- ─────────────────────────────────────────────────────────────────────────
 local SurvivalTab = Window:CreateTab("🛡️ Survival", 4483362458)
-
 SurvivalTab:CreateSection("Anti-Void")
-
-SurvivalTab:CreateSlider({
-    Name         = "Void Y Threshold",
-    Range        = {-500, 0},
-    Increment    = 5,
-    Suffix       = " Y",
-    CurrentValue = -50,
-    Flag         = "VoidThreshold",
-    Callback = function(v)
-        S.antiVoidThreshold = v
-    end
-})
 
 SurvivalTab:CreateToggle({
     Name         = "🌊 Anti-Void (Auto-TP on fall)",
@@ -744,20 +731,53 @@ SurvivalTab:CreateToggle({
             HB.antiVoid = RunService.Heartbeat:Connect(function()
                 local hrp = getMyHRP()
                 if not hrp then return end
-                if hrp.Position.Y < S.antiVoidThreshold then
-                    if S.safePosition then
-                        hrp.CFrame = CFrame.new(S.safePosition)
+                
+                -- Hardcoded threshold at Y=26
+                if hrp.Position.Y < 26 then
+                    local floorFolder = workspace:FindFirstChild("IslandMap")
+                    floorFolder = floorFolder and floorFolder:FindFirstChild("FloorGrass")
+                    
+                    if floorFolder then
+                        local closest = nil
+                        local closestDist = math.huge
+                        local myPos = hrp.Position
+                        
+                        -- Find closest floor part
+                        for _, part in ipairs(floorFolder:GetChildren()) do
+                            if part:IsA("BasePart") then
+                                local partPos = part.Position
+                                local dist = math.sqrt((myPos.X - partPos.X)^2 + (myPos.Z - partPos.Z)^2)
+                                if dist < closestDist then
+                                    closestDist = dist
+                                    closest = part
+                                end
+                            end
+                        end
+                        
+                        if closest then
+                            -- Clamp player position to the part's XZ bounds (closest edge)
+                            local halfSize = closest.Size / 2
+                            local partPos = closest.Position
+                            
+                            local clampedX = math.clamp(myPos.X, partPos.X - halfSize.X, partPos.X + halfSize.X)
+                            local clampedZ = math.clamp(myPos.Z, partPos.Z - halfSize.Z, partPos.Z + halfSize.Z)
+                            local targetY = partPos.Y + halfSize.Y + 3.5
+                            
+                            hrp.CFrame = CFrame.new(clampedX, targetY, clampedZ)
+                            
+                            Rayfield:Notify({
+                                Title   = "🛡️ Anti-Void",
+                                Content = "Pulled back to map edge!",
+                                Duration = 2
+                            })
+                        end
                     else
+                        -- Fallback if IslandMap structure doesn't exist
                         local spawn = workspace:FindFirstChildOfClass("SpawnLocation")
                         if spawn then
                             hrp.CFrame = spawn.CFrame + Vector3.new(0, 5, 0)
                         end
                     end
-                    Rayfield:Notify({
-                        Title   = "🛡️ Anti-Void",
-                        Content = "Saved from the void!",
-                        Duration = 2
-                    })
                 end
             end)
         else
