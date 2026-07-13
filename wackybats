@@ -189,21 +189,40 @@ end
 local function fire(tool)
     fireSelected(tool)
 end
-
 -- ── Autofarm coroutine (reusable) ─────────────────────────────────────────
--- [FIX] extracted into a single function so CharacterAdded and the toggle
---       both call the same logic without duplicating the loop
+local FALLBACK_POS = Vector3.new(87, 229, 5)
+
 local function startAutofarmLoop()
     killHB("autofarmTP")
     HB.autofarmTP = RunService.Heartbeat:Connect(function()
-        if S.autofarmTarget then lockToPlayer(S.autofarmTarget) end
+        if S.autofarmTarget then 
+            lockToPlayer(S.autofarmTarget) 
+        else
+            -- Freeze at fallback position when no target
+            local char = Players.LocalPlayer.Character
+            if char and char:FindFirstChild("HumanoidRootPart") then
+                char.HumanoidRootPart.CFrame = CFrame.new(FALLBACK_POS)
+            end
+        end
     end)
+    
     task.spawn(function()
         while S.autofarmActive do
+            local char = Players.LocalPlayer.Character
+            local hum = char and char:FindFirstChild("Humanoid")
+            
+            -- Safety: pause if dead or has forcefield
+            if not char or not hum or hum.Health <= 0 or char:FindFirstChildOfClass("ForceField") then
+                S.autofarmTarget = nil
+                task.wait(1)
+                continue
+            end
+            
             if not S.autofarmTarget or not isAlive(S.autofarmTarget) then
                 if S.autofarmTarget and not isAlive(S.autofarmTarget) then
                     S.kills = S.kills + 1
                 end
+                
                 local pool = getAliveEnemies()
                 if #pool > 0 then
                     S.autofarmTarget = pool[math.random(1, #pool)]
@@ -213,12 +232,13 @@ local function startAutofarmLoop()
                         Duration = 2
                     })
                 else
+                    -- No valid targets: freeze at safe position
                     S.autofarmTarget = nil
                     task.wait(1)
                 end
             else
                 fire(findTool())
-                task.wait(S.farmDelay)  -- [FIX] uses farmDelay not spamDelay
+                task.wait(S.farmDelay)
             end
         end
         S.autofarmTarget = nil
